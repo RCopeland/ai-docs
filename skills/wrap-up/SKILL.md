@@ -68,6 +68,18 @@ Summarize:
 
 Verify the correct changes are staged for commit.
 
+### 5b. Check for Unstaged/Untracked Changes
+
+Before proceeding, check for any changes that aren't staged:
+```bash
+git status
+```
+
+If there are unstaged changes or untracked files:
+- Ask the user if they want to stage and include them
+- Or if they should be ignored (e.g., .env files, build artifacts)
+- Do NOT auto-stage without explicit user approval
+
 ### 6. Check Branch Name
 
 Check current branch name:

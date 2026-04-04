@@ -115,3 +115,9 @@ When reviewing TypeScript code, look for:
 - [ ] Type inference leveraged where appropriate
 - [ ] Optional chaining used for nested property access
 - [ ] No hardcoded type assertions that bypass safety
+
+## `any` and `unknown` Usage
+
+- **Avoid `any`** - It bypasses TypeScript's type checking and defeats the purpose of using TypeScript
+- **Avoid `unknown`** - Use specific types whenever possible. Only use when receiving data from external sources (e.g., third-party APIs) without type definitions
+- **When in doubt, ask** - If the agent believes there is no clear type solution and needs to use `any` or `unknown`, it should ask the user first before proceeding

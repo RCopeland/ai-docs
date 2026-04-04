@@ -24,7 +24,9 @@ The development workflow is a loop: **Plan → Implement → Validate → Automa
 
 ### Implementation Standards
 
-Load these reference files when writing code:
+**Important:** Before you process a prompt, check if you need to load a reference file based on the technology/context of the request.
+
+Load these reference files when writing code. Tell the user which files are being loaded:
 
 | Context | Files to Load |
 |---------|---------------|
@@ -33,6 +35,8 @@ Load these reference files when writing code:
 | Performance-critical | `performance.md` |
 | Plain JavaScript | `javascript.md`, `typescript.md`, `eslint.md`, `prettier.md` |
 | Node.js/CLI | `javascript.md`, `typescript.md`, `eslint.md`, `prettier.md` |
+| Testing (general) | `testing.md`, `typescript.md` |
+| Testing (Vitest) | `vitest.md`, `testing.md`, `typescript.md` |
 
 Follow the standards in these files while coding to prevent issues before validation.
 
@@ -56,6 +60,14 @@ For new projects, construct ESLint config by:
 - Prefer existing libraries/frameworks over adding new ones
 - Avoid unnecessary comments
 - Be concise - answer directly without preamble
+
+## Git Workflow
+
+- **NEVER commit without explicit instruction** - Wait for user to say "commit" or "ready to commit"
+- **NEVER push without explicit instruction** - Wait for user to say "push" or "ready to push"
+- **ALWAYS ask before committing** - Present what will be committed and ask for confirmation
+- **ALWAYS ask before pushing** - Confirm with user before pushing to remote
+- **Summarize all changes** - When asked to summarize changes, always report staged, unstaged, and untracked changes separately. Make the user explicitly aware of any unstaged or untracked files that are not included in the summary.
 
 ## Preferences
 
@@ -101,12 +113,98 @@ Run these in order:
 
 All must pass with **no errors or warnings** (within reason) before proceeding to manual review.
 
+### Fix Guidelines
+
+When ESLint reports issues:
+- **DEFAULT to fixing the issue** - Don't disable rules or comment out code
+- **If no clear fix exists** - Ask user for guidance
+- **Prop mutations**: Refactor to use emits or local state instead of mutating props
+
 ### Browser Console Validation
 
 For frontend projects, verify no JavaScript errors in the browser console:
 - Open browser DevTools and check Console tab for errors
 - Clear console, reload page, check for new errors
 - Report any errors found
+
+## Manual Component Review
+
+When user asks to review component + tests together:
+
+### Output Format
+
+For **new components**, show full code in triple-backtick blocks with language specifier:
+- Script: ```typescript
+- Template: ```html
+- Style: ```css
+
+For **existing components**, show a diff view of changes.
+
+Use this exact format:
+
+```markdown
+## [N]. [ComponentName].vue
+
+[Full new component code OR diff for existing component]
+
+### Suggestions
+- [Category] Line X: Brief issue/fix
+
+---
+
+## Tests: [ComponentName].spec.ts
+
+[Full test code - no truncation]
+
+### Suggestions
+- [Category] Line X: Brief issue/fix
+
+---
+
+**Remaining ([N]):**
+1. ~~[ComponentName].vue~~ ✅
+2. [Next Component].vue
+```
+
+### Syntax Highlighting for Component Code
+
+Use triple backticks with language specifier to get syntax highlighting:
+- **Script section**: ```typescript
+- **Template section**: ```html
+- **Style section**: ```css
+
+Example:
+
+```typescript
+<script setup lang="ts">
+import { ref } from 'vue'
+</script>
+```
+
+```html
+<template>
+  <div>Component</div>
+</template>
+```
+
+```css
+<style scoped>
+.class { color: red; }
+</style>
+```
+
+### Test File Review
+
+For manual component review, show the FULL test code even if long - do not truncate. Use ```typescript for test files.
+
+### Workflow
+
+1. Update todo list in todowrite tool
+2. Show component code (full file, no truncation, ```typescript for script, ```html for template, ```css for styles)
+3. Show test code (full file, no truncation)
+4. Provide review notes with line references
+5. Show remaining items list
+6. Ask user if ready for next
 
 ## Modes
 
@@ -121,34 +219,32 @@ When user invokes Review mode or asks to review code:
    - Plain JavaScript → `javascript.md`, `typescript.md`
    - Always load `vue-review.md` as base
 
-2. **Chunk-Based Review** - Present code in 50-100 line chunks with:
-   - Title describing the chunk
-   - Code with line numbers
-   - Structure/organization notes
-   - Suggestions as concise bullets with category and line reference
+2. **Show Whole Files** - Present the FULL file code without truncating:
+   - Use ```typescript for script blocks, ```html for templates, ```css for styles
+   - Include all lines with line numbers
+   - Do not truncate even for large files
 
-3. **Iteration** - End each chunk with "Ready for next chunk?" or "Review complete"
-
-4. **Apply Changes** - When user asks to fix:
-   - Apply changes with edit/write tools
-   - Re-verify the modified code
-   - Present changes back for review
-
-5. **Output Format** - Use:
+3. **Output Format** - Use:
    ```
-   ## Chunk [N]: [Title]
-   
-   ### Code
-   [50-100 lines with line numbers]
-   
-   ### Structure
-   [Organization notes]
-   
+   ## [ComponentName].vue
+
+   ```typescript
+   [full script code]
+   ```
+
+   ```html
+   [full template code]
+   ```
+
+   ```css
+   [style block if present]
+   ```
+
    ### Suggestions
    - **[Category]** Line X: Brief issue
    ```
 
-6. **Summary** - End with review summary:
+4. **Summary** - End with review summary:
    - Files reviewed
    - Key issues (top 3-5)
    - Praise (good patterns)
