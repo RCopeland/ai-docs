@@ -1,6 +1,6 @@
 ---
 name: wrike
-description: Safely use ~/Dev/wrike-ai for Wrike task and comment work. Use when listing, creating, updating, commenting on, or bulk-cleaning Wrike items through the wrike CLI, especially when target scope, duplicate avoidance, HTML conversion, confirmation, and secret-handling guardrails matter.
+description: Safely use ~/Dev/wrike-ai for Wrike task, custom item type, approval, assignee, and comment work. Use when listing, creating, updating, assigning, approving, commenting on, or bulk-cleaning Wrike items through the wrike CLI, especially when target scope, item type selection, duplicate avoidance, HTML conversion, confirmation, and secret-handling guardrails matter.
 ---
 
 # Wrike AI Safe
@@ -43,6 +43,7 @@ The confirmation must include:
 - action type
 - profile name if known
 - target space and/or folder
+- item type for creates (for example, standard Task or `Dev`)
 - item count
 - titles and/or task IDs being changed
 
@@ -69,7 +70,19 @@ Before creating tasks in bulk, and preferably before any create action:
 - look for likely duplicates by title or obviously overlapping work
 - if duplicates are likely, stop and ask instead of creating
 
-### 4) Secret and auth handling
+### 4) Item type selection
+
+Before creating work, determine whether it should use the standard Wrike task type or a custom item type.
+
+- Use `wrike listCustomItemTypes --type Task` to discover applicable task-like custom item types and their space IDs.
+- Match the custom item type to the target space and the nature of the work. For example, software implementation work in an engineering sprint may belong to a `Dev` item type.
+- Do not assume that the user's generic words “task,” “item,” or “work” mean the standard Task type.
+- If both a standard Task and a plausible custom item type are reasonable, ask which type to use before confirmation.
+- Include the resolved item type and custom item type ID in the confirmation summary.
+- When a custom item type is selected, pass `--custom-item-type-id <ID>` to `wrike createTask`.
+- After creation, verify the response contains the expected `customItemTypeId` when Wrike returns that field.
+
+### 5) Secret and auth handling
 
 - Never print tokens or secrets.
 - Never edit `.env` unless the user explicitly asks.
@@ -77,7 +90,7 @@ Before creating tasks in bulk, and preferably before any create action:
 - Do not run auth commands unless the user explicitly asks.
 - If auth is missing or broken, report the exact issue and stop.
 
-### 5) Ambiguity rules
+### 6) Ambiguity rules
 
 Ask instead of guessing when any of these are unclear:
 - which profile to use
@@ -85,6 +98,7 @@ Ask instead of guessing when any of these are unclear:
 - whether the user wants read-only discovery vs applying changes
 - how to map a source document into Wrike tasks
 - whether an existing item should be updated vs a new one created
+- whether new work should be a standard Task or a custom item type such as `Dev`
 
 ---
 
@@ -160,6 +174,14 @@ wrike listTasks --space-id <SPACE_ID> --limit 25
 
 Use filters like `--title`, `--status`, and `--next-page-token` when helpful.
 
+### List custom item types
+
+```bash
+wrike listCustomItemTypes --type Task --limit 100
+```
+
+Use the returned `spaceId` to select a type that belongs to the target space.
+
 ---
 
 ## Write workflows
@@ -176,6 +198,7 @@ Example:
 wrike createTask \
   --folder-id IEABCD123 \
   --title "Build parity inventory for the new app" \
+  --custom-item-type-id IECUSTOM123456789 \
   --description-html "<h3>Why</h3><p>Create a reliable view of what the new app already supports.</p><h3>Scope</h3><ul><li>Review routing</li><li>Review modular blocks</li></ul><h3>Acceptance</h3><ul><li>Status exists for each comparison bucket</li></ul>"
 ```
 
@@ -185,10 +208,23 @@ wrike createTask \
 wrike updateTask \
   --task-id IEACDEF456 \
   --title "Updated title" \
-  --status InProgress
+  --add-responsible-ids KUAAAAAA
 ```
 
 Use `--description-html` for structured body updates.
+
+Task status writes are intentionally unsupported by this CLI. `--status` remains available only as a read filter on `listTasks`.
+
+### Create approval
+
+```bash
+wrike createApproval \
+  --task-id IEACDEF456 \
+  --approver-ids KUAAAAAA \
+  --description "Please review"
+```
+
+Use `--folder-id` instead of `--task-id` for a folder or project. Creating an approval and updating approvers are write actions and require confirmation.
 
 ### Create comment
 
@@ -274,12 +310,13 @@ For non-trivial Wrike work, follow this sequence:
 
 1. Confirm the allowed profile and target space/folder.
 2. Run read-only discovery (`listSpaces`, `listFolders`, `listTasks`) as needed.
-3. Check for likely duplicates before creates.
-4. Draft cleaned titles and HTML descriptions.
-5. Present the confirmation summary with folder and item count.
-6. Wait for approval.
-7. Execute the write.
-8. Verify results with a read command when possible.
+3. For creates, resolve the standard/custom item type with `listCustomItemTypes`; ask if ambiguous.
+4. Check for likely duplicates before creates.
+5. Draft cleaned titles and HTML descriptions.
+6. Present the confirmation summary with folder, item type, and item count.
+7. Wait for approval.
+8. Execute the write.
+9. Verify results with a read command when possible.
 
 ---
 

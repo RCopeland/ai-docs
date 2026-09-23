@@ -59,11 +59,38 @@ All implementation, review, tests, staging, commits, pushes, and PR preparation 
 
 The root agent coordinates the workflow and preserves the user's scope. Use the globally configured `dev` and `review` agents for their respective roles; their shared guidance conditionally handles frontend work. Do not spawn `frontend-dev`, `frontend-review`, or other surface-specific variants. Give each agent the resolved task, the worktree path and branch context, the minimum relevant repository context, its permitted actions, and the exact output expected from it.
 
+### BB Child-Thread Requirement
+
+Every scout, developer, reviewer, and publisher must run as a BB child thread so the workflow is visible as a collapsible tree in the BB sidebar. Create each role with `bb thread spawn`; do not use a provider's internal subagent, delegation, team, or collaboration mechanism for these workflow roles.
+
+For each child:
+
+1. Run `bb status --json` and resolve the current parent thread ID, project ID, and assigned worktree path.
+2. Spawn the role with an explicit project, the invocation worktree as its environment, parent linkage, and visible sidebar status:
+
+   ```bash
+   bb thread spawn \
+     --project "<project-id>" \
+     --environment "<absolute-worktree-path>" \
+     --parent-self \
+     --visibility visible \
+     --title "<Role>: <short task name>" \
+     --prompt "<role instructions and expected result>" \
+     --json
+   ```
+
+3. Capture the returned thread ID. Verify with `bb thread show <child-thread-id> --json` that `parentThreadId` equals the current `BB_THREAD_ID`, visibility is `visible`, and the environment points at the invocation worktree.
+4. Wait with `bb thread wait <child-thread-id>`, then read `bb thread output <child-thread-id>`. Inspect `bb thread log <child-thread-id>` when the final output is incomplete or the child failed.
+5. Continue an existing role with `bb thread tell <child-thread-id> "<follow-up>"`, followed by another wait and output read. Reuse the same developer or reviewer child during feedback loops instead of creating an unlinked provider-internal agent.
+6. Keep child threads visible and linked after completion. Do not hide, archive, or delete them as part of this workflow.
+
+If `bb` is unavailable, `BB_THREAD_ID` is missing, or BB cannot create and verify the child thread, stop before substituting another delegation mechanism. Report the exact failure and ask the user whether to proceed without sidebar-visible subagents.
+
 ### 1. Scout When Needed
 
 Skip the scout when the task is sufficiently clear to implement and verify.
 
-Invoke a scout only when ambiguity can be reduced through repository inspection. The scout is read-only and must:
+Invoke a scout as a visible BB child thread only when ambiguity can be reduced through repository inspection. The scout is read-only and must:
 
 - locate relevant code, tests, conventions, and existing behavior;
 - identify evidence that resolves the ambiguity;
@@ -73,7 +100,7 @@ The scout must not create an implementation plan or edit files. If material ambi
 
 ### 2. Developer
 
-Invoke the global `dev` agent with the resolved task and acceptance criteria. The developer owns implementation and should:
+Invoke the global `dev` agent in a visible BB child thread with the resolved task and acceptance criteria. The developer owns implementation and should:
 
 - confirm its repository root is the assigned worktree before editing;
 - make only in-scope changes;
@@ -85,7 +112,7 @@ Use additional instances of the global `dev` agent only when the task has indepe
 
 ### 3. Reviewer
 
-After development is complete, invoke the global `review` agent as a distinct subagent in the same invocation worktree. The reviewer independently inspects the task, final diff, and test evidence. It may run read-only diagnostics and tests but must not edit implementation files.
+After development is complete, invoke the global `review` agent as a distinct visible BB child thread in the same invocation worktree. The reviewer independently inspects the task, final diff, and test evidence. It may run read-only diagnostics and tests but must not edit implementation files.
 
 The reviewer must end with exactly one decision:
 
@@ -100,7 +127,7 @@ Continue until the reviewer returns `APPROVED`. If the same material blocker sur
 
 ### 5. Publisher
 
-Once review is approved, invoke a publisher with the task, approved diff, verification results, and reviewer decision. The publisher must:
+Once review is approved, invoke a publisher in a visible BB child thread with the task, approved diff, verification results, and reviewer decision. The publisher must:
 
 1. Confirm it is operating in the invocation worktree on the approved task branch.
 2. Recheck the relevant Git and pull-request CLI authentication before publishing; if Azure authentication expired, pause for user reauthentication and retry after confirmation.
@@ -110,16 +137,21 @@ Once review is approved, invoke a publisher with the task, approved diff, verifi
 6. Re-verify that the task and base branches are appropriate; ask before renaming or replacing either branch.
 7. Summarize the changes and propose a commit message with a short subject and brief body.
 8. Ask the user to approve the commit before creating it.
-9. After approval, create the commit and push the task branch to `origin`.
-10. Open a pull request with a concise title and a body that covers the change, verification, and relevant risks or follow-ups. For Azure DevOps, use explicit organization, project, repository, source branch, and target branch arguments rather than mutable global defaults.
-11. Return the pull request URL, task branch, and retained worktree path as the workflow output.
+9. After approval, create the commit normally and allow all repository commit hooks to run. Never use `--no-verify`, `HUSKY=0`, hook-skipping environment variables, or any other mechanism that bypasses a commit hook.
+10. If the commit or any commit hook fails for any reason—including missing credentials, unavailable tooling, an external scan failure, or a code/test failure—do not commit, push, or open the pull request. Preserve the staged changes, report the exact failed check, and ask the user how they want to proceed. Retry only after the user provides direction or the blocker is remediated, then reconfirm that the staged diff still matches the approved diff.
+11. After the commit and all commit hooks succeed, push the task branch to `origin`.
+12. Before opening the pull request, ask who should review it unless the user has already explicitly named the intended reviewer in the current workflow. Resolve that person through a read-only lookup in the pull-request platform. If the supplied name does not identify exactly one person, present concise candidates and ask the user to choose; never guess from a similar name.
+13. Open a pull request with a concise title and a body that covers the change, verification, and relevant risks or follow-ups, and add the resolved person as a reviewer. For Azure DevOps, use explicit organization, project, repository, source branch, target branch, and reviewer identity arguments rather than mutable global defaults. Verify the reviewer after creation.
+14. When the task is linked to a Wrike item, load and follow the `wrike` skill after the PR opens. Through read-only discovery, resolve the linked task, the reviewer's unique Wrike contact, current assignees, and active approvals. If any identity is ambiguous, ask the user instead of guessing. Before any Wrike write, present one confirmation covering all proposed changes: retain existing assignees and add the reviewer, start a new approval, and add the same reviewer as approver. Execute only after explicit confirmation, do not create a duplicate active approval without separate confirmation, and verify the resulting assignment and approval.
+15. Return the pull request URL, reviewer, Wrike handoff result, task branch, and retained worktree path as the workflow output.
 
-Do not commit, push, or open the pull request before the required commit approval. If any gate cannot be satisfied safely, report the exact blocker and wait for user direction.
+Do not commit, push, or open the pull request before the required commit approval. Do not perform any Wrike write before the separate Wrike confirmation. If any gate cannot be satisfied safely, report the exact blocker and wait for user direction.
 
 ## Coordination Rules
 
 - Follow repository-specific control documents and instructions throughout the workflow.
 - Preserve unrelated changes and existing authorization boundaries.
+- Use BB child-thread IDs as the durable identity for every workflow role and report those IDs in status updates.
 - Prefer reusing the developer and reviewer agents across feedback cycles so they retain context.
 - Treat frontend as conditional guidance within `dev` and `review`, never as separate agent identities.
 - Keep the invocation worktree after publishing so an open pull request can be amended safely. Remove it only when the user explicitly requests cleanup and it is clean.
