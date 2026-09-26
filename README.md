@@ -51,7 +51,9 @@ These live in [`skills/`](./skills).
 | `subagent-dev-guidance` | Shared implementation guidance for the `dev` sub-agent |
 | `subagent-review-guidance` | Shared read-only review guidance for the `review` sub-agent |
 | `wrike` / `wrike-ai-safe` | Safe Wrike CLI workflows with confirmation and scope guardrails |
+| `wrike` / `wrike-ai-safe` | Safe Wrike CLI workflows with confirmation and scope guardrails |
 | `write-todos` | Break plans into independently executable todos with constraints and acceptance criteria |
+| `work-planning` | Decompose upcoming work into right-sized deliverables with estimates, ranges, and a sequenced plan |
 
 ## Portability
 
