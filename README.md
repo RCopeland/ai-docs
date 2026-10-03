@@ -41,6 +41,7 @@ These live in [`skills/`](./skills).
 | `code-review-and-quality` | Multi-axis code review across correctness, readability, architecture, security, and performance |
 | `commit` | Create polished commits with good staging and message structure |
 | `dev-task-orchestrator` | End-to-end task workflow through scout / dev / review / publish stages |
+| `factory-supervisor` | Intake-and-dispatch supervisor that orchestrates a fleet of child threads over a durable ledger |
 | `find-skills` | Discover installable skills for new capabilities |
 | `frontend-ai-review` | AI-first frontend review for Vue/Nuxt and related UI work |
 | `frontend-ui-engineering` | Production-quality user-facing UI work with accessibility and responsive behavior |
