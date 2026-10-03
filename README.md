@@ -125,18 +125,16 @@ supervisor never decomposes a task itself. See
 [`references/triage.md`](./skills/factory-supervisor/references/triage.md).
 
 **Output is rate-limited.** Generation is cheap and reading is not, so the
-factory has three brakes:
+factory has two brakes:
 
 | Control | What it does | Where |
 | --- | --- | --- |
 | Review-queue cap | Blocks **dispatch** when open, non-draft, unreviewed PRs reach `REVIEW_WIP_CAP` (default 12). Derive it from Little's law, not taste. | `scripts/queue-depth.sh` |
 | PR size budget | Target <= 400 changed lines excluding lockfiles and snapshots; splits must each pass the suite alone | child prompt |
-| Review lanes | `docs/review-lanes.md` in the repo maps paths to a green pipeline, sampled human review, code-owner review, or two-human review. Lane A starts empty. | `templates/review-lanes.md` |
 
 The cap blocks dispatch rather than PR creation, because an agent stopped from
-opening a PR just parks an invisible branch. The lanes also resolve reviewer
-assignment without the supervisor choosing anyone: the repository decides from
-the paths, and `CODEOWNERS` supplies the humans. See
+opening a PR just parks an invisible branch. The supervisor never assigns a
+reviewer: every PR waits for the captain to assign one by hand. See
 [`references/output.md`](./skills/factory-supervisor/references/output.md).
 
 ## Wiring into Pi

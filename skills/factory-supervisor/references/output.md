@@ -71,40 +71,39 @@ each PR passes the suite on its own and states a single concern. A stack that
 fails that test is rejected and returns as one large PR — which the captain then
 sees, rather than a pile of interdependent fragments.
 
-## Review lanes
+## Reviewer assignment
 
-Not every PR deserves the same reader. The lanes decide *which* PRs reach a human
-at all, and the table lives in the repo — `docs/review-lanes.md`, committed next
-to `CODEOWNERS` — so the paths decide, not the supervisor.
+The supervisor never assigns a reviewer. Every PR it produces waits for the
+captain to assign one by hand, or for a separate automation to do it. There is
+no lane file, no routing table, and nothing for a repository to adopt.
 
-Copy [`../templates/review-lanes.md`](../templates/review-lanes.md) into the
-repository and fill it in. The four lanes:
+That makes the queue depth the only thing standing between the factory and an
+unreviewed merge, which is why the cap is not optional and why the size budget
+matters more here than it would with automated routing. If you are assigning
+reviewers yourself, the two numbers that set your load are how many PRs are
+waiting and how big each one is.
 
-| Lane | Contents | Gate before merge | Who signs off |
-|---|---|---|---|
-| **A** Green pipeline | Dependency bumps, docs, copy, generated clients, changes matching an already-approved pattern | Types, tests, lint, size budget pass; automated reviewer raises no blocking finding | The pipeline; captain samples a few weekly |
-| **B** Automated + sampled human | Ordinary feature and bug-fix work inside one module, strong tests | Lane A gates plus a human reading the evidence bundle; code read only when the evidence is thin | One reviewer, assigned by load |
-| **C** Code owner | Public APIs, shared libraries, performance-sensitive paths, anything crossing module boundaries | Lanes A and B plus a code owner's approval | The owning team via `CODEOWNERS` |
-| **D** Two humans, code read | Authentication and authorisation, payments, migrations, secrets, CI configuration, `.github/` | All of the above plus **two** approvals | Two humans |
+### Tier your own attention, not the router
 
-### Lane A starts empty
+Reviewing every PR with equal care does not scale, and reviewing them all
+casually defeats the purpose. Since assignment is manual, the useful judgment is
+yours to make at assignment time, not something to encode in a file:
 
-This is the rule that makes lanes safe. A class of change earns its way into
-Lane A only after a run of merges with no reverts and no escaped defects, and
-falls back out to Lane B after a single revert or escaped defect.
+- **Cheap to verify, low blast radius** — dependency bumps, docs, copy, generated
+  clients, another instance of a pattern you have already approved. If CI is
+  green and the diff matches the pattern, these can clear quickly.
+- **Ordinary single-module work with strong tests** — read the evidence: what
+  changed, what proves it. Read the code when the evidence is thin.
+- **Crosses a boundary** — public APIs, shared libraries, performance-sensitive
+  paths, anything touching more than one module. Read the code.
+- **Worth real care** — authentication, authorisation, payments, migrations,
+  secrets, CI configuration. Read the code closely, and ideally not alone.
 
-A lane that starts populated is just a permission you granted yourself in a busy
-week. Keep lane membership in the committed table, and keep it under review.
-
-### Why lanes solve the reviewer problem
-
-The supervisor is forbidden from assigning a reviewer, because choosing one
-would mean inventing a name. Lanes dissolve that: **the repository decides**.
-The changed paths determine the lane, `CODEOWNERS` supplies the humans, and the
-supervisor only reads the answer.
-
-If `docs/review-lanes.md` is absent from a repository, the child opens the PR
-without a reviewer and says so — it does not guess a lane.
+Two habits keep this honest. First, let a change class earn a cheaper treatment
+over a run of clean merges, and drop it back the moment one reverts or escapes a
+defect — a class that gets cheap treatment in a busy week is how unreviewed
+merges start. Second, keep the size budget tight, because a small PR is what
+makes the cheaper treatment defensible in the first place.
 
 ## Merge-queue discipline
 
@@ -132,7 +131,7 @@ batches it into ESCALATE and the captain decides.
 ## Metrics worth keeping
 
 Throughput counts are easy to game and say nothing about the queue. If you track
-anything, track these, weekly, split by lane:
+anything, track these, weekly:
 
 | Metric | Definition | Act when |
 |---|---|---|
@@ -142,7 +141,7 @@ anything, track these, weekly, split by lane:
 | Time to first review | Opened to first human review, median and p90 | Median exceeds half a working day |
 | Time in review | Opened to merge, median and p90 | p90 exceeds target by 50% |
 | PR size | Changed lines excluding lockfiles and snapshots, median | Median rises two weeks running |
-| Unreviewed merges | Share of merges with no human review outside Lane A | Any merge outside Lane A has no review |
+| Unreviewed merges | Share of merges with no human review | Any merge the captain did not review |
 
 Keep PR size next to time in review. They correct each other: a team measured on
 time in review alone will split changes past the point of usefulness.
@@ -153,5 +152,6 @@ time in review alone will split changes past the point of usefulness.
   tier exists. The reviewer's `APPROVED` and the publisher's PR are inputs to
   that decision, not substitutes for it.
 - Choose a reviewer.
-- Relax a lane or raise the cap to clear a queue. Lower concurrency instead.
+- Relax the standard or raise the cap to clear a queue. Lower concurrency
+  instead.
 - Let a child re-queue into a failing merge queue.

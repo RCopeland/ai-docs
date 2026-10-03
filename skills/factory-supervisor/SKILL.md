@@ -1,6 +1,6 @@
 ---
 name: factory-supervisor
-description: Run a persistent supervisor that intakes work and dispatches it to child threads, either as a single bounded task across agents (workflow mode) or as a perpetual intake-to-dispatch loop (factory mode). Intake is read-only triage, and output is rate-limited by a review-queue cap, a PR size budget, and repo-defined review lanes. Use when the user asks to run the factory, supervise a fleet of agents, orchestrate a queue of tasks, pull and dispatch work continuously, or build factory mode.
+description: Run a persistent supervisor that intakes work and dispatches it to child threads, either as a single bounded task across agents (workflow mode) or as a perpetual intake-to-dispatch loop (factory mode). Intake is read-only triage, and output is rate-limited by a review-queue cap and a PR size budget. Use when the user asks to run the factory, supervise a fleet of agents, orchestrate a queue of tasks, pull and dispatch work continuously, or build factory mode.
 ---
 
 # Factory Supervisor
@@ -206,7 +206,7 @@ Then, for each admitted task, in order:
      --parent-self \
      --visibility visible \
      --title "Task: <short name>" \
-     --prompt "Load and follow the dev-task-orchestrator skill for this task: <task description and acceptance criteria>. Task ID: <task-id>. Keep the change within the PR size budget: target 400 changed lines or fewer excluding lockfiles and snapshots. If it exceeds that, split it into stacked PRs that each pass the suite independently and each state a single concern; never a stack whose members only make sense together. For the reviewer: read docs/review-lanes.md if it exists, determine the lane from the changed paths, and request that lane's required reviewers. If the file is absent, open the PR without a reviewer and say so. Do not ask who should review the PR. If a merge queue or batched CI run fails, report the failure and stop; do not re-queue. Report the PR URL." \
+     --prompt "Load and follow the dev-task-orchestrator skill for this task: <task description and acceptance criteria>. Task ID: <task-id>. Keep the change within the PR size budget: target 400 changed lines or fewer excluding lockfiles and snapshots. If it exceeds that, split it into stacked PRs that each pass the suite independently and each state a single concern; never a stack whose members only make sense together. Do not ask who should review the PR and do not assign a reviewer: open the PR without one and report the URL. Reviewer assignment is handled outside this workflow. If a merge queue or batched CI run fails, report the failure and stop; do not re-queue." \
      --json
    ```
 
@@ -279,7 +279,7 @@ python3 "$SKILL_DIR/scripts/factory-state.py" set-state "<task-id>" awaiting-cap
 The reviewer returning `APPROVED` moves a task to `publishing`. The publisher
 opens the PR. An open PR moves the task to `awaiting-captain`. Nothing moves
 past that without the captain. See [references/output.md](references/output.md)
-for the PR size budget, the review lanes, and the merge-queue discipline that
+for the PR size budget and the merge-queue discipline that
 apply once a child is publishing.
 
 `awaiting-captain` covers two different situations — a PR ready to merge, and a
@@ -344,26 +344,19 @@ separate interruptions:
 
 ## Reviewer assignment
 
-The supervisor does **not** assign PR reviewers, and does not choose one by
-hand. It does not invent a reviewer, and does not guess one from a similar name.
+The supervisor does **not** assign PR reviewers. It opens the PR without a
+reviewer and leaves assignment to the captain, either by hand or through a
+separate automation. Do not invent a reviewer, do not guess one from a similar
+name, and do not block a task waiting for one.
 
-Instead, **the repository decides.** The lane comes from the changed paths and
-`docs/review-lanes.md`; the humans come from `CODEOWNERS`. The supervisor only
-reads the answer. See [references/output.md](references/output.md) for the lane
-table and the rule that Lane A starts empty.
+Factory children therefore receive one explicit instruction in their prompt:
 
-Factory children therefore receive this instruction in their prompt:
-
-> Read `docs/review-lanes.md` if it exists, determine the lane from the changed
-> paths, and request that lane's required reviewers. If the file is absent, open
-> the PR without a reviewer and say so. Do not ask who should review the PR.
+> Do not ask who should review the PR and do not assign a reviewer. Open the PR
+> without one and report the URL. Reviewer assignment is handled outside this
+> workflow.
 
 This keeps the factory's delivery path free of any human round-trip. A task
 completes when its PR is open, and the captain's review is the gate that follows.
-
-A repository with no `docs/review-lanes.md` is a repo this factory has not been
-wired into yet. Opening without a reviewer is the safe default; record that the
-lane file is missing so it gets added rather than silently skipped every time.
 
 If the repository's own guidance (`CONTRIBUTING.md`, `CODEOWNERS`, a local agent
 file) or a platform default already requires or supplies a reviewer, let that
