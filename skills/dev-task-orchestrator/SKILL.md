@@ -155,10 +155,17 @@ Once review is approved, invoke a publisher in a visible BB child thread with th
 
     The worktree gate symlinks the repository-root `.env` when one exists, so a missing-credential blocker despite that step means the check needs something the root `.env` does not carry. Report what it needed; do not go looking for another secret file.
 11. After the commit and all commit hooks succeed, push the task branch to `origin`.
-12. Before opening the pull request, ask who should review it unless the user has already explicitly named the intended reviewer in the current workflow. Resolve that person through a read-only lookup in the pull-request platform. If the supplied name does not identify exactly one person, present concise candidates and ask the user to choose; never guess from a similar name.
-13. Open a pull request with a concise title and a body that covers the change, verification, and relevant risks or follow-ups, and add the resolved person as a reviewer. For Azure DevOps, use explicit organization, project, repository, source branch, target branch, and reviewer identity arguments rather than mutable global defaults. Verify the reviewer after creation.
+12. Before opening the pull request, determine the reviewer from the repository's review lanes when it has them:
+
+    - If `docs/review-lanes.md` exists, read it and map the changed paths to their lane. A pull request is in the highest lane any of its changed paths maps to; mixed changes take the stricter lane. Request that lane's required reviewers, resolving identities through a read-only lookup in the pull-request platform. Do not choose outside the lane's requirement, and do not upgrade or downgrade a lane yourself — the committed table decides.
+    - If the lane is **A (green pipeline)**, do not add a reviewer; the pipeline is the sign-off.
+    - If `docs/review-lanes.md` does not exist, ask who should review it unless the user has already explicitly named the intended reviewer in the current workflow. Resolve that person through a read-only lookup, and never guess from a similar name.
+    - If a resolved name does not identify exactly one person, present concise candidates and ask the user to choose.
+
+    When this workflow runs under the `factory-supervisor` skill, the child is instructed not to ask: it follows `docs/review-lanes.md` if present, and otherwise opens the PR without a reviewer and reports that the lane file is missing. In that case skip the question and follow that instruction.
+13. Open a pull request with a concise title and a body that covers the change, verification, and relevant risks or follow-ups, and add the lane's required reviewers. For Azure DevOps, use explicit organization, project, repository, source branch, target branch, and reviewer identity arguments rather than mutable global defaults. Verify the reviewer after creation, or record explicitly that the lane required none.
 14. When the task is linked to a Wrike item, load and follow the `wrike` skill after the PR opens. Through read-only discovery, resolve the linked task, the reviewer's unique Wrike contact, current assignees, and active approvals. If any identity is ambiguous, ask the user instead of guessing. Before any Wrike write, present one confirmation covering all proposed changes: retain existing assignees and add the reviewer, start a new approval, and add the same reviewer as approver. Execute only after explicit confirmation, do not create a duplicate active approval without separate confirmation, and verify the resulting assignment and approval.
-15. Return the pull request URL, reviewer, Wrike handoff result, task branch, and retained worktree path as the workflow output.
+15. Return the pull request URL, the lane and reviewer (or the reason none was required), Wrike handoff result, task branch, and retained worktree path as the workflow output.
 
 Do not commit, push, or open the pull request before the reviewer has returned `APPROVED`. Do not perform any Wrike write before the separate Wrike confirmation. If any gate cannot be satisfied safely, report the exact blocker and wait for user direction.
 
@@ -169,5 +176,6 @@ Do not commit, push, or open the pull request before the reviewer has returned `
 - Use BB child-thread IDs as the durable identity for every workflow role and report those IDs in status updates.
 - Prefer reusing the developer and reviewer agents across feedback cycles so they retain context.
 - Treat frontend as conditional guidance within `dev` and `review`, never as separate agent identities.
+- Let the repository's committed review lanes decide reviewer assignment when `docs/review-lanes.md` exists. The lane table is the authority, not a preference; this workflow only reads it.
 - Keep the invocation worktree after publishing so an open pull request can be amended safely. Remove it only when the user explicitly requests cleanup and it is clean.
 - Keep human-facing and inter-agent messages concise and legible.
