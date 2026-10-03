@@ -10,6 +10,37 @@ threads, environments, machines, terminals, providers, parent/child links, and
 `--json` on every command. This skill tells you how to drive that machinery.
 It never asks you to rebuild it.
 
+## Setup, once per session
+
+Every helper call below uses `$SKILL_DIR`. Resolve it once, at the start of the
+session, to the absolute path of this skill's directory — the one containing
+this `SKILL.md` and `scripts/`:
+
+```bash
+# Whatever means the current harness uses to locate a loaded skill.
+# Typical sources, in order: the path BB injected, the skills dir for this
+# harness, or the ai-docs checkout.
+SKILL_DIR="<absolute path to the factory-supervisor skill directory>"
+test -f "$SKILL_DIR/scripts/factory-state.py" \
+  || echo 'SKILL_DIR is wrong: factory-state.py not found'
+```
+
+Do not guess `SKILL_DIR` and do not fall back to a hardcoded path: this repo is
+cloned to different locations on different machines, and a wrong `SKILL_DIR`
+silently calls a stale helper.
+
+Then confirm the state directory exists on this machine:
+
+```bash
+python3 "$SKILL_DIR/scripts/factory-state.py" init
+```
+
+`init` is idempotent and never touches an existing ledger, so running it every
+session is safe. State lives at `~/.bb/state/factory/` on **every** machine; the
+contents are deliberately machine-specific, because each machine runs its own
+factories. See [references/setup.md](references/setup.md) when setting up a new
+machine.
+
 ## Prime directive
 
 **Never implement anything yourself.**
@@ -41,9 +72,9 @@ Rebuild the truth from the ledger and the live fleet, not from what you
 remember.
 
 ```bash
-python3 ~/.bb/state/factory/bin/factory-state.py list
-python3 ~/.bb/state/factory/bin/factory-state.py decisions
-python3 ~/.bb/state/factory/bin/factory-state.py reconcile
+python3 "$SKILL_DIR/scripts/factory-state.py" list
+python3 "$SKILL_DIR/scripts/factory-state.py" decisions
+python3 "$SKILL_DIR/scripts/factory-state.py" reconcile
 bb thread list --parent-thread "$BB_THREAD_ID" --json
 ```
 
@@ -98,7 +129,7 @@ For each admitted task, in order:
 1. Append the admission event, capturing what was asked:
 
    ```bash
-   python3 ~/.bb/state/factory/bin/factory-state.py append task.admitted \
+   python3 "$SKILL_DIR/scripts/factory-state.py" append task.admitted \
      "<factory>/<source>-<ref>" \
      --data '{"title":"...","source":"gh","url":"...","scope":"..."}'
    ```
@@ -146,9 +177,9 @@ For each admitted task, in order:
 4. Append the dispatch with the child identity:
 
    ```bash
-   python3 ~/.bb/state/factory/bin/factory-state.py append task.dispatched \
+   python3 "$SKILL_DIR/scripts/factory-state.py" append task.dispatched \
      "<task-id>" --data '{"childThreadId":"<child-thread-id>"}'
-   python3 ~/.bb/state/factory/bin/factory-state.py set-state "<task-id>" dispatched
+   python3 "$SKILL_DIR/scripts/factory-state.py" set-state "<task-id>" dispatched
    ```
 
 If spawn fails, do not substitute a provider-internal subagent. Record the
@@ -177,18 +208,18 @@ success.
 Then update the ledger to the state the child actually reached:
 
 ```bash
-python3 ~/.bb/state/factory/bin/factory-state.py set-state "<task-id>" working
-python3 ~/.bb/state/factory/bin/factory-state.py set-state "<task-id>" reviewing
-python3 ~/.bb/state/factory/bin/factory-state.py set-state "<task-id>" publishing
+python3 "$SKILL_DIR/scripts/factory-state.py" set-state "<task-id>" working
+python3 "$SKILL_DIR/scripts/factory-state.py" set-state "<task-id>" reviewing
+python3 "$SKILL_DIR/scripts/factory-state.py" set-state "<task-id>" publishing
 ```
 
 Record the visible artifacts on completion, so the captain's queue is
 reconstructible from the ledger alone:
 
 ```bash
-python3 ~/.bb/state/factory/bin/factory-state.py append task.outcome "<task-id>" \
+python3 "$SKILL_DIR/scripts/factory-state.py" append task.outcome "<task-id>" \
   --data '{"prUrl":"https://...","summary":"one line of what shipped"}'
-python3 ~/.bb/state/factory/bin/factory-state.py set-state "<task-id>" awaiting-captain
+python3 "$SKILL_DIR/scripts/factory-state.py" set-state "<task-id>" awaiting-captain
 ```
 
 The reviewer returning `APPROVED` moves a task to `publishing`. The publisher
@@ -229,9 +260,9 @@ memory that survives rotation — write the captain's answer there yourself befo
 you rotate:
 
 ```bash
-python3 ~/.bb/state/factory/bin/factory-state.py append task.escalated "<task-id>" \
+python3 "$SKILL_DIR/scripts/factory-state.py" append task.escalated "<task-id>" \
   --data '{"question":"...","options":["A","B"],"consequence":"..."}'
-python3 ~/.bb/state/factory/bin/factory-state.py set-state "<task-id>" awaiting-captain
+python3 "$SKILL_DIR/scripts/factory-state.py" set-state "<task-id>" awaiting-captain
 ```
 
 `decisions.md` is a plain file the tool only reads; nothing writes it for you.

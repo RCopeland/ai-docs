@@ -108,7 +108,7 @@ mutating the source: record the rejection in the ledger with its reason, and the
 ESCALATE step surfaces it batched.
 
 ```bash
-python3 ~/.bb/state/factory/bin/factory-state.py append task.escalated \
+python3 "$SKILL_DIR/scripts/factory-state.py" append task.escalated \
   "<factory>/gh-<number>" \
   --data '{"question":"Candidate rejected at intake","reason":"<which scope rule failed>"}'
 ```
