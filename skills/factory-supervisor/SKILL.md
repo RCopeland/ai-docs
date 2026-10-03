@@ -121,7 +121,7 @@ For each admitted task, in order:
      --parent-self \
      --visibility visible \
      --title "Task: <short name>" \
-     --prompt "Load and follow the dev-task-orchestrator skill for this task: <task description and acceptance criteria>. Task ID: <task-id>. Reviewer: <resolved reviewer identity>." \
+     --prompt "Load and follow the dev-task-orchestrator skill for this task: <task description and acceptance criteria>. Task ID: <task-id>. Do not ask who should review the PR: open it without a reviewer and report the PR URL." \
      --json
    ```
 
@@ -240,39 +240,25 @@ yourself and record a `task.decision` event. Treat `decisions.md` as durable
 truth **only because the supervisor flushes it** — an answer that lives solely in
 conversation memory is lost on rotation.
 
-## Reviewer policy
+## Reviewer assignment
 
-`dev-task-orchestrator` asks a human who should review the PR and asks again on
-commit-hook failure. In factory mode no human sits in the child's loop, so those
-prompts would stall every task. The supervisor resolves both before dispatch.
+The supervisor does **not** assign PR reviewers. It opens the PR without a
+reviewer and leaves assignment to the captain, either by hand or through a
+separate automation. Do not invent a reviewer, do not guess one from a similar
+name, and do not block a task waiting for one.
 
-**Default reviewer per project.** Read it from a small config file in the target
-repository at `.factory.json` (repo root), which the captain owns:
+`dev-task-orchestrator` step 12 asks who should review the PR. Factory children
+therefore receive one explicit instruction in their prompt:
 
-```json
-{
-  "prReviewer": {"name": "Jane Doe", "platformId": "jdoe", "wrikeContactId": "KU..."}
-}
-```
+> Do not ask who should review this PR. Open it without a reviewer and report the
+> PR URL. Reviewer assignment is handled outside this workflow.
 
-Fields are optional; `name` is required when the file exists. If the repository
-already names a reviewer in its own guidance (`CONTRIBUTING.md`, `CODEOWNERS`, a
-local agent file), prefer that and treat `.factory.json` as the fallback.
+This keeps the factory's delivery path free of any human round-trip. A task
+completes when its PR is open, and the captain's review is the gate that follows.
 
-Resolve the reviewer once per wake and pass it into the child prompt (shown in
-DISPATCH). The child then uses it in place of asking the user.
-
-**When no reviewer is configured**, the supervisor must not dispatch work that
-would need one. It escalates the missing configuration to the captain **once**,
-records the answer in `decisions.md`, and does not re-ask:
-
-```bash
-python3 ~/.bb/state/factory/bin/factory-state.py append task.escalated \
-  "<task-id>" --data '{"question":"No prReviewer configured for <project>. Who reviews PRs?","consequence":"PR cannot be opened autonomously"}'
-```
-
-Then either the captain supplies a reviewer (recorded, replayable) or the factory
-runs only work that does not open a PR.
+If the repository's own guidance (`CONTRIBUTING.md`, `CODEOWNERS`, a local agent
+file) or a platform default already requires or supplies a reviewer, let that
+apply — the point is that the supervisor does not choose one.
 
 **Commit-hook failure (step 9).** A child must not wait for a human. It reports
 the blocker back to the supervisor — `bb thread output` on completion, or a
