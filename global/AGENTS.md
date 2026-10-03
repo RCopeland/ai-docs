@@ -71,6 +71,20 @@ When spawning a subagent:
 - Prefer existing project conventions over generic best practices.
 - If a specialized role is needed that does not exist yet, suggest creating a new agent file under `~/.pi/agent/agents/`.
 
+## Factory supervisor
+
+When I ask to run the factory, supervise a fleet, orchestrate a queue of tasks,
+or pull and dispatch work continuously, load the `factory-supervisor` skill.
+
+One-line rule: the factory supervisor never implements — it intakes, dispatches,
+supervises, and escalates, and every piece of work runs in a BB child thread.
+Fleet state lives in `~/.bb/state/factory/`, and I remain the merge authority.
+
+The skill travels in this repo and works on any machine running BB with no edits.
+State at that path is machine-specific on purpose, and the wake automation is
+per-host, so setting up a new machine is a short checklist rather than a port —
+see the skill's `references/setup.md`.
+
 ## Communication style
 
 - Be concise by default.
