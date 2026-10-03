@@ -1,7 +1,14 @@
 # Intake
 
 How the supervisor finds work, decides what it may take, and avoids doing the
-same task twice. Read this at the INTAKE step of every wake.
+same task twice. Read this at the INTAKE step of every wake, together with
+[triage.md](triage.md), which defines the rejection vocabulary and the read-only
+guarantee.
+
+**Intake is read-only.** It never labels, comments on, closes, or otherwise
+mutates a source item. When a candidate is not ready, the supervisor records the
+reason in its own ledger and reports it upward — it does not edit the ticket. See
+[triage.md](triage.md) for why that rule is absolute rather than cautious.
 
 ## Sources
 
@@ -23,7 +30,7 @@ gh issue list \
 Follow the existing `github-issues` skill for auth and repo resolution; it is
 the source of truth for `gh` usage. The `agent-ready` label is the contract: a
 human applied it, so the issue is in scope for autonomous work. Do not widen
-the query to unlabeled issues on your own.
+the query to unlabeled issues on your own, and do not apply labels to anything.
 
 Task ID: `<factory>/gh-<number>` — for example `home/gh-412`.
 
@@ -93,7 +100,8 @@ Never dispatch the same work twice. Before admitting, check all three:
    note that evidence in the admission event.
 
 Match on the source reference (issue number, Wrike ID) first. Fall back to title
-similarity only to flag a possible duplicate for a human, never to auto-skip.
+similarity only to set `duplicate-suspected` for a human, never to auto-skip and
+never to label the source. See [triage.md](triage.md) for the full dedup rules.
 
 ## Filing work that is not ready
 
@@ -104,18 +112,28 @@ not allowed from the intake path. This keeps GitHub and Wrike symmetric: neither
 is written to before the captain confirms.
 
 Never silently skip a candidate. Instead, satisfy the guarantee without
-mutating the source: record the rejection in the ledger with its reason, and the
-ESCALATE step surfaces it batched.
+mutating the source: record the rejection in the ledger with exactly one reason
+from the pinned vocabulary in [triage.md](triage.md), and the ESCALATE step
+surfaces it batched.
 
 ```bash
 python3 "$SKILL_DIR/scripts/factory-state.py" append task.escalated \
   "<factory>/gh-<number>" \
-  --data '{"question":"Candidate rejected at intake","reason":"<which scope rule failed>"}'
+  --data '{"question":"Candidate rejected at intake","reason":"needs-info"}'
 ```
+
+The reason must be one of `needs-info`, `too-large`, `needs-breakdown`,
+`needs-human`, `duplicate-suspected`, or `not-verifiable`. Never a freeform
+string: a fixed vocabulary is countable, and it cannot be re-argued with
+slightly different wording on every wake.
 
 The supervisor presents these in the ESCALATE message as a short list:
 "candidates I rejected and why" — title, source link, and the failed rule. The
 captain then decides whether to relabel it `agent-ready`, split it, or leave it.
+
+`too-large` and `needs-breakdown` are the handoff to the captain's separate
+task-breakdown workflow. The supervisor names the need and stops; it does not
+decompose the task itself. See [triage.md](triage.md).
 
 Do **not** run `gh issue edit` or `gh issue comment` from intake. If the captain
 explicitly authorizes relabeling later, it is a separate confirmed action that

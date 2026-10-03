@@ -101,6 +101,10 @@ next machine does not rediscover the query. Keep the
 `<factory>/<source>-<ref>` task-ID convention.
 
 Intake is read-only. It never labels, comments on, or transitions a source item.
+There is nothing to install for triage: `references/triage.md` documents the
+label taxonomy the supervisor classifies against, but the skill applies no
+labels and needs no `agent-ready` automation of its own. That label is applied by
+a human. See [triage.md](triage.md) for the read-only guarantee.
 
 ## Verifying the setup
 

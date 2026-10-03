@@ -1,6 +1,6 @@
 ---
 name: factory-supervisor
-description: Run a persistent supervisor that intakes work and dispatches it to child threads, either as a single bounded task across agents (workflow mode) or as a perpetual intake-to-dispatch loop (factory mode). Use when the user asks to run the factory, supervise a fleet of agents, orchestrate a queue of tasks, pull and dispatch work continuously, or build factory mode.
+description: Run a persistent supervisor that intakes work and dispatches it to child threads, either as a single bounded task across agents (workflow mode) or as a perpetual intake-to-dispatch loop (factory mode). Intake is read-only triage, and output is rate-limited by a review-queue cap and a PR size budget. Use when the user asks to run the factory, supervise a fleet of agents, orchestrate a queue of tasks, pull and dispatch work continuously, or build factory mode.
 ---
 
 # Factory Supervisor
@@ -40,6 +40,14 @@ session is safe. State lives at `~/.bb/state/factory/` on **every** machine; the
 contents are deliberately machine-specific, because each machine runs its own
 factories. See [references/setup.md](references/setup.md) when setting up a new
 machine.
+
+Resolve the per-factory config once per session, alongside `SKILL_DIR`:
+
+- `REPO` — the repository this factory works on. Required by the output gate.
+- `REVIEW_WIP_CAP` — the review-queue cap. Defaults to 12 when unset. See
+  [references/output.md](references/output.md) for how the number is derived and
+  why a fixed cap is not good enough.
+- `FACTORY` — the factory name that prefixes task IDs.
 
 ## Prime directive
 
@@ -104,12 +112,25 @@ append-only; never rewrite it.
 
 Pull candidate work from the configured source. Read
 [references/intake.md](references/intake.md) for the queries, the scope filter,
-the dedup rules, and how to handle work that is not ready.
+the dedup rules, and how to handle work that is not ready, and
+[references/triage.md](references/triage.md) for the rejection vocabulary.
+
+**Intake is read-only.** You never apply a label, post a comment, close, or
+otherwise mutate a source item. You classify, record the result in your own
+ledger, and report upward. When a candidate is not ready, name exactly one reason
+from the pinned list in triage.md — `needs-info`, `too-large`,
+`needs-breakdown`, `needs-human`, `duplicate-suspected`, or `not-verifiable` —
+and surface it batched in ESCALATE. Never a freeform string, and never silently
+skipped.
+
+`too-large` and `needs-breakdown` hand off to the captain's separate
+task-breakdown workflow. Name the need and stop; do not decompose the task
+yourself.
 
 For GitHub:
 
 ```bash
-gh issue list --repo <owner>/<repo> --label agent-ready --state open \
+gh issue list --repo "$REPO" --label agent-ready --state open \
   --json number,title,body,labels,assignees,url --limit 50
 ```
 
@@ -118,13 +139,46 @@ discovery. Do not write to Wrike during intake.
 
 Default to small, well-specified changes. A tightly scoped bug fix or a
 mechanical refactor succeeds far more often than an open-ended architecture
-task, because the child can verify it. When a task is too large or too vague,
-do not silently skip it — file it back with a label or comment (see
-intake.md).
+task, because the child can verify it.
 
 ### 3. DISPATCH
 
-For each admitted task, in order:
+**First, check the review queue.** Never dispatch when the factory is already
+outrunning its reviewer. See [references/output.md](references/output.md) for why
+this gate exists.
+
+```bash
+"$SKILL_DIR/scripts/queue-depth.sh" --repo "$REPO" --cap "${REVIEW_WIP_CAP:-12}"
+gate=$?
+case "$gate" in
+  0) : ;;  # depth below cap; dispatch normally
+  1) # Queue is full. Record the hold and do NOT spawn this task.
+     python3 "$SKILL_DIR/scripts/factory-state.py" append dispatch.held "$TASK_ID" \
+       --data "{\"reason\":\"review-queue-full\",\"depth\":$DEPTH,\"cap\":$CAP}"
+     # Batch it into the ESCALATE step. Do not spawn while the gate fails.
+     ;;
+  3) # Depth unknown (gh failed). This is NOT a full queue.
+     python3 "$SKILL_DIR/scripts/factory-state.py" append dispatch.held "$TASK_ID" \
+       --data '{"reason":"queue-depth-unknown"}'
+     # Report it; do not silently stall the factory behind a false "full" reason.
+     ;;
+  *) echo "queue-depth: unexpected exit $gate" >&2 ;;
+esac
+```
+
+Exit `1` and exit `3` mean different things and must not be conflated. A failed
+`gh` call is not evidence that the queue is full: treating it as "full" stalls
+the factory behind a reason that will not clear, and hides an auth or network
+problem as a capacity problem.
+
+A held dispatch is not a failure. It is the brake working. Record it as
+`dispatch.held` so it stays distinguishable from `task.failed`, and report it
+batched — never one interruption per held task.
+
+The gate blocks **dispatch**, never PR creation. A child stopped from opening a
+PR just parks an invisible branch, which is the same inventory in a worse place.
+
+Then, for each admitted task, in order:
 
 1. Append the admission event, capturing what was asked:
 
@@ -152,7 +206,7 @@ For each admitted task, in order:
      --parent-self \
      --visibility visible \
      --title "Task: <short name>" \
-     --prompt "Load and follow the dev-task-orchestrator skill for this task: <task description and acceptance criteria>. Task ID: <task-id>. Do not ask who should review the PR: open it without a reviewer and report the PR URL." \
+     --prompt "Load and follow the dev-task-orchestrator skill for this task: <task description and acceptance criteria>. Task ID: <task-id>. Keep the change within the PR size budget: target 400 changed lines or fewer excluding lockfiles and snapshots. If it exceeds that, split it into stacked PRs that each pass the suite independently and each state a single concern; never a stack whose members only make sense together. Do not ask who should review the PR and do not assign a reviewer: open the PR without one and report the URL. Reviewer assignment is handled outside this workflow. If a merge queue or batched CI run fails, report the failure and stop; do not re-queue." \
      --json
    ```
 
@@ -224,7 +278,9 @@ python3 "$SKILL_DIR/scripts/factory-state.py" set-state "<task-id>" awaiting-cap
 
 The reviewer returning `APPROVED` moves a task to `publishing`. The publisher
 opens the PR. An open PR moves the task to `awaiting-captain`. Nothing moves
-past that without the captain.
+past that without the captain. See [references/output.md](references/output.md)
+for the PR size budget and the merge-queue discipline that
+apply once a child is publishing.
 
 `awaiting-captain` covers two different situations — a PR ready to merge, and a
 task blocked on a question. They are distinguished by the fields present, not by
@@ -271,6 +327,21 @@ yourself and record a `task.decision` event. Treat `decisions.md` as durable
 truth **only because the supervisor flushes it** — an answer that lives solely in
 conversation memory is lost on rotation.
 
+Two additional queues are reported from the same batched message, never as
+separate interruptions:
+
+- **Candidates I rejected and why** — title, source link, and exactly one pinned
+  reason from [references/triage.md](references/triage.md). These are the
+  read-only counterpart to the mutation intake is not allowed to perform.
+- **Dispatch held** — tasks the output gate blocked, with the reason. Two
+  distinct reasons, and they need different answers:
+  - `review-queue-full` — the factory is producing PRs faster than they can be
+    reviewed. The depth or the cap is wrong, not the gate. Lower concurrency;
+    do not raise the cap to clear a queue.
+  - `queue-depth-unknown` — `gh` failed, so the gate never ran. This is an auth,
+    network, or rate-limit problem wearing a capacity costume. Fix the
+    credential or connectivity issue; do not treat it as a full queue.
+
 ## Reviewer assignment
 
 The supervisor does **not** assign PR reviewers. It opens the PR without a
@@ -278,11 +349,11 @@ reviewer and leaves assignment to the captain, either by hand or through a
 separate automation. Do not invent a reviewer, do not guess one from a similar
 name, and do not block a task waiting for one.
 
-`dev-task-orchestrator` step 12 asks who should review the PR. Factory children
-therefore receive one explicit instruction in their prompt:
+Factory children therefore receive one explicit instruction in their prompt:
 
-> Do not ask who should review this PR. Open it without a reviewer and report the
-> PR URL. Reviewer assignment is handled outside this workflow.
+> Do not ask who should review the PR and do not assign a reviewer. Open the PR
+> without one and report the URL. Reviewer assignment is handled outside this
+> workflow.
 
 This keeps the factory's delivery path free of any human round-trip. A task
 completes when its PR is open, and the captain's review is the gate that follows.
@@ -295,6 +366,11 @@ apply — the point is that the supervisor does not choose one.
 the blocker back to the supervisor — `bb thread output` on completion, or a
 `bb thread tell` question — and the supervisor records it and batches it to the
 captain in the ESCALATE step. Children never block on a human directly.
+
+**Merge-queue failure.** A child that hits a failing merge queue or a red batch
+reports and stops. It must not re-queue: at agent frequency, repeated retries
+burn full CI runs and cascade failures onto everything behind it. See
+[references/output.md](references/output.md).
 
 ## Context discipline
 
