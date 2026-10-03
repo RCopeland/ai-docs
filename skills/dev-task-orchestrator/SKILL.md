@@ -50,6 +50,17 @@ After the start-up gate and before invoking a subagent, create a fresh worktree 
 3. Create the task branch from the updated pull-request base branch. Never attach the worktree to a branch already checked out elsewhere.
 4. Confirm with `git worktree list --porcelain` and `git -C <worktree> rev-parse --show-toplevel` that the path and branch are unique and correctly attached.
 5. Record the absolute worktree path, task branch, base branch, remote, Azure DevOps organization, and Azure DevOps project as shared workflow context.
+6. Provision the task environment. A worktree contains only tracked files, so any untracked file a check depends on is absent. If a `.env` file exists at the repository root of the primary checkout, symlink it into the worktree at the same relative path:
+
+   ```bash
+   PRIMARY=/absolute/path/to/primary/checkout   # the checkout the worktree was created from
+   WORKTREE=/absolute/path/to/invocation/worktree
+   [ -f "$PRIMARY/.env" ] && ln -s "$PRIMARY/.env" "$WORKTREE/.env"
+   ```
+
+   Symlink, never copy: a copy is a second secret on disk that can be committed or left behind in a worktree that outlives the task. Do not search for, discover, or copy any other secret file, and do not look beyond the repository root — only `.env` at the root, and only by that exact name. If no such file exists, continue: a repository without a root `.env` is normal and is not a blocker.
+
+   Provisioning belongs here because this gate runs once per task, before any subagent. The scout, developer, reviewer, and publisher all share this one worktree, so linking here makes the file available to every role without repeating the instruction in each.
 
 If a path or branch collides with another invocation, generate a new suffix. Never reuse, delete, unlock, or overwrite another invocation's worktree or branch.
 
@@ -138,11 +149,16 @@ Once review is approved, invoke a publisher in a visible BB child thread with th
 7. Summarize the changes and propose a commit message with a short subject and brief body.
 8. Once the reviewer has returned `APPROVED`, create the commit normally and allow all repository commit hooks to run. Never use `--no-verify`, `HUSKY=0`, hook-skipping environment variables, or any other mechanism that bypasses a commit hook.
 9. If the commit or any commit hook fails for any reason—including missing credentials, unavailable tooling, an external scan failure, or a code/test failure—do not commit, push, or open the pull request. Preserve the staged changes, report the exact failed check, and ask the user how they want to proceed. Retry only after the user provides direction or the blocker is remediated, then reconfirm that the staged diff still matches the approved diff.
-10. After the commit and all commit hooks succeed, push the task branch to `origin`.
-11. Before opening the pull request, ask who should review it unless the user has already explicitly named the intended reviewer in the current workflow. Resolve that person through a read-only lookup in the pull-request platform. If the supplied name does not identify exactly one person, present concise candidates and ask the user to choose; never guess from a similar name.
-12. Open a pull request with a concise title and a body that covers the change, verification, and relevant risks or follow-ups, and add the resolved person as a reviewer. For Azure DevOps, use explicit organization, project, repository, source branch, target branch, and reviewer identity arguments rather than mutable global defaults. Verify the reviewer after creation.
-13. When the task is linked to a Wrike item, load and follow the `wrike` skill after the PR opens. Through read-only discovery, resolve the linked task, the reviewer's unique Wrike contact, current assignees, and active approvals. If any identity is ambiguous, ask the user instead of guessing. Before any Wrike write, present one confirmation covering all proposed changes: retain existing assignees and add the reviewer, start a new approval, and add the same reviewer as approver. Execute only after explicit confirmation, do not create a duplicate active approval without separate confirmation, and verify the resulting assignment and approval.
-14. Return the pull request URL, reviewer, Wrike handoff result, task branch, and retained worktree path as the workflow output.
+10. Report a check that could not run differently from a check that failed. A nonzero exit caused by a missing file, absent credential, or unprovisioned tool is a **blocker**, and must be reported as `verification blocked: <what is missing>`. A nonzero exit caused by the change itself is a **failure**, reported as `verification failed: <check>`. Never describe a blocker as a failure: the two imply opposite next actions, and a missing `.env` reported as a broken test sends the reader looking for a bug that does not exist.
+
+    A blocker is not authorization to proceed. Do not stub, invent, or guess credentials; do not create a placeholder `.env`; and never bypass the check with `--no-verify`, `HUSKY=0`, a hook-skipping variable, or a skipped test. Escalate the blocker with the exact command and its output, and stop.
+
+    The worktree gate symlinks the repository-root `.env` when one exists, so a missing-credential blocker despite that step means the check needs something the root `.env` does not carry. Report what it needed; do not go looking for another secret file.
+11. After the commit and all commit hooks succeed, push the task branch to `origin`.
+12. Before opening the pull request, ask who should review it unless the user has already explicitly named the intended reviewer in the current workflow. Resolve that person through a read-only lookup in the pull-request platform. If the supplied name does not identify exactly one person, present concise candidates and ask the user to choose; never guess from a similar name.
+13. Open a pull request with a concise title and a body that covers the change, verification, and relevant risks or follow-ups, and add the resolved person as a reviewer. For Azure DevOps, use explicit organization, project, repository, source branch, target branch, and reviewer identity arguments rather than mutable global defaults. Verify the reviewer after creation.
+14. When the task is linked to a Wrike item, load and follow the `wrike` skill after the PR opens. Through read-only discovery, resolve the linked task, the reviewer's unique Wrike contact, current assignees, and active approvals. If any identity is ambiguous, ask the user instead of guessing. Before any Wrike write, present one confirmation covering all proposed changes: retain existing assignees and add the reviewer, start a new approval, and add the same reviewer as approver. Execute only after explicit confirmation, do not create a duplicate active approval without separate confirmation, and verify the resulting assignment and approval.
+15. Return the pull request URL, reviewer, Wrike handoff result, task branch, and retained worktree path as the workflow output.
 
 Do not commit, push, or open the pull request before the reviewer has returned `APPROVED`. Do not perform any Wrike write before the separate Wrike confirmation. If any gate cannot be satisfied safely, report the exact blocker and wait for user direction.
 

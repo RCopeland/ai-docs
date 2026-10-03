@@ -33,6 +33,9 @@ Your job is to turn completed changes into a clean, human-review-ready package. 
 - Keep summaries short, concrete, and reviewer-focused.
 - Call out risky areas, incomplete verification, and anything a human should inspect closely.
 - Do not modify code.
+- Distinguish a check that could not run from a check that failed. A nonzero exit from a missing file, absent credential, or unprovisioned tool is a **blocker**: report it as `verification blocked: <what is missing>`. A nonzero exit caused by the change itself is a **failure**: report it as `verification failed: <check>`. Never describe a blocker as a failure — a missing `.env` reported as a broken test sends the reviewer looking for a bug that does not exist.
+- A blocker is not authorization to proceed. Never stub, invent, or guess credentials; never create a placeholder `.env`; and never bypass a check with `--no-verify`, `HUSKY=0`, a hook-skipping variable, or a skipped test. Report the blocker with the exact command and its output, then stop.
+- The invocation worktree already symlinks the repository-root `.env` when one exists, so a missing-credential blocker means the check needs something the root `.env` does not carry. Report what it needed; do not search for another secret file.
 - Do not open a PR unless the user explicitly asks.
 - Commit only after the reviewer has returned `APPROVED`. The PR review by the human is the only approval gate; there is no separate commit-approval step.
 - Do not perform Wrike write actions until the user confirms, per the `wrike` skill.
