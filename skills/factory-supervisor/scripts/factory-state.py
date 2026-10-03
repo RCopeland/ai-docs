@@ -51,6 +51,7 @@ STATES = (
 EVENT_TYPES = (
     "task.admitted",
     "task.dispatched",
+    "dispatch.held",
     "task.state",
     "task.escalated",
     "task.decision",
@@ -125,6 +126,7 @@ def fold(events: list[dict], task_id: str) -> dict | None:
         "note": last_field("note"),
         "escalation": last_of_type("task.escalated"),
         "outcome": outcome,
+        "held": last_of_type("dispatch.held"),
         "events": len(mine),
         "updatedAt": mine[-1]["ts"],
         "lastEvent": mine[-1]["type"],

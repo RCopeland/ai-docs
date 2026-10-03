@@ -111,6 +111,34 @@ the existing `dev-task-orchestrator` workflow in its own isolated worktree, so
 the fleet reuses the single-task path rather than duplicating it. Implementation
 lives in this repo; runtime state never does.
 
+### Intake and output controls
+
+Two halves keep the factory from outrunning the captain.
+
+**Intake is read-only triage.** The supervisor classifies a candidate and records
+the result in its own ledger; it never labels, comments on, or closes a source
+item. When a candidate is not ready it names exactly one pinned reason —
+`needs-info`, `too-large`, `needs-breakdown`, `needs-human`,
+`duplicate-suspected`, or `not-verifiable` — and reports it batched. `too-large`
+and `needs-breakdown` hand off to a separate task-breakdown workflow; the
+supervisor never decomposes a task itself. See
+[`references/triage.md`](./skills/factory-supervisor/references/triage.md).
+
+**Output is rate-limited.** Generation is cheap and reading is not, so the
+factory has three brakes:
+
+| Control | What it does | Where |
+| --- | --- | --- |
+| Review-queue cap | Blocks **dispatch** when open, non-draft, unreviewed PRs reach `REVIEW_WIP_CAP` (default 12). Derive it from Little's law, not taste. | `scripts/queue-depth.sh` |
+| PR size budget | Target <= 400 changed lines excluding lockfiles and snapshots; splits must each pass the suite alone | child prompt |
+| Review lanes | `docs/review-lanes.md` in the repo maps paths to a green pipeline, sampled human review, code-owner review, or two-human review. Lane A starts empty. | `templates/review-lanes.md` |
+
+The cap blocks dispatch rather than PR creation, because an agent stopped from
+opening a PR just parks an invisible branch. The lanes also resolve reviewer
+assignment without the supervisor choosing anyone: the repository decides from
+the paths, and `CODEOWNERS` supplies the humans. See
+[`references/output.md`](./skills/factory-supervisor/references/output.md).
+
 ## Wiring into Pi
 
 Pi treats global instructions, agents, and skills separately.
