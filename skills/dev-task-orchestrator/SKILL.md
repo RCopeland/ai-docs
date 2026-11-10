@@ -1,6 +1,6 @@
 ---
 name: dev-task-orchestrator
-description: Turn a repository-backed development task into a reviewed pull request through environment checks, an isolated Git worktree, and an explicit scout, developer, reviewer, and publisher workflow. Use only when explicitly invoked for a task that should follow this personal workflow.
+description: Turn a repository-backed development task into a reviewed pull request through environment checks, an isolated Git worktree, and an explicit scout, developer, architecture reviewer, reviewer, and publisher workflow. Use only when explicitly invoked for a task that should follow this personal workflow.
 ---
 
 # Dev Task Orchestrator
@@ -72,7 +72,7 @@ The root agent coordinates the workflow and preserves the user's scope. Use the 
 
 ### BB Child-Thread Requirement
 
-Every scout, developer, reviewer, and publisher must run as a BB child thread so the workflow is visible as a collapsible tree in the BB sidebar. Create each role with `bb thread spawn`; do not use a provider's internal subagent, delegation, team, or collaboration mechanism for these workflow roles.
+Every scout, developer, architecture reviewer, reviewer, and publisher must run as a BB child thread so the workflow is visible as a collapsible tree in the BB sidebar. Create each role with `bb thread spawn`; do not use a provider's internal subagent, delegation, team, or collaboration mechanism for these workflow roles.
 
 For each child:
 
@@ -121,22 +121,31 @@ Invoke the global `dev` agent in a visible BB child thread with the resolved tas
 
 Use additional instances of the global `dev` agent only when the task has independent workstreams with non-overlapping file ownership inside the invocation worktree, or give each instance another explicitly managed worktree. The root is responsible for preventing conflicting edits and integrating their work into the task branch.
 
-### 3. Reviewer
+### 3. Architecture Gate
 
-After development is complete, invoke the global `review` agent as a distinct visible BB child thread in the same invocation worktree. The reviewer independently inspects the task, final diff, and test evidence. It may run read-only diagnostics and tests but must not edit implementation files.
+After development is complete and before code review, invoke the global `architecture-reviewer` agent as a distinct visible BB child thread in the same invocation worktree. The architecture reviewer is read-only and loads the `architecture-review-guidance` skill, which is the source of truth for its method. It must end with exactly one decision:
+
+- `CONFORMS` or `CONFORMS_WITH_NOTES` — proceed to review, carrying any notes as context.
+- `DEVIATION_SIGNIFICANT` or `NO_BASELINE` — pause the task, apply `needs-arch-review`, record the reason `architecture-deviation`, and stop before review or publish until a human resolves the escalation.
+
+A passing decision admits the change to code review. This gate does not judge code quality or correctness; that remains the reviewer's job. If a material fix from the review loop touches an architecture surface, re-run this gate before the next review cycle.
+
+### 4. Reviewer
+
+After the architecture gate passes, invoke the global `review` agent as a distinct visible BB child thread in the same invocation worktree. The reviewer independently inspects the task, final diff, and test evidence. It may run read-only diagnostics and tests but must not edit implementation files.
 
 The reviewer must end with exactly one decision:
 
 - `APPROVED` when the task and acceptance criteria are satisfied with no blocking findings.
 - `CHANGES_REQUESTED` with concrete, prioritized findings when further work is required.
 
-### 4. Developer/Reviewer Loop
+### 5. Developer/Reviewer Loop
 
 If the reviewer requests changes, send all findings back to the developer. After the developer addresses or explicitly resolves them, return the updated result to the same reviewer. Every material implementation change must be reviewed again.
 
 Continue until the reviewer returns `APPROVED`. If the same material blocker survives three review cycles, stop the loop, summarize the disagreement or impediment, and ask the user for direction. Do not invoke the publisher without reviewer approval.
 
-### 5. Publisher
+### 6. Publisher
 
 Once review is approved, invoke a publisher in a visible BB child thread with the task, approved diff, verification results, and reviewer decision. The publisher must:
 

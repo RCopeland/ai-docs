@@ -36,6 +36,7 @@ These live in [`agents/`](./agents).
 
 | Agent | Purpose |
 | --- | --- |
+| `architecture-reviewer` | Read-only architecture conformance gate before code review |
 | `dev` | Implementation, refactors, fixes, and targeted verification |
 | `publisher` | Change summaries and publication / PR handoff workflows |
 | `researcher` | External-knowledge research with sourced findings |
@@ -47,6 +48,8 @@ These live in [`skills/`](./skills).
 
 | Skill | What it does |
 | --- | --- |
+| `architecture-baseline` | Locate a repository's stated architecture, or return `NO_BASELINE` |
+| `architecture-review-guidance` | Read-only architecture conformance method for the architecture reviewer |
 | `code-review-and-quality` | Multi-axis code review across correctness, readability, architecture, security, and performance |
 | `commit` | Create polished commits with good staging and message structure |
 | `dev-task-orchestrator` | End-to-end task workflow through scout / dev / review / publish stages. Commits once the reviewer returns `APPROVED`; the human PR review is the single approval gate. |
