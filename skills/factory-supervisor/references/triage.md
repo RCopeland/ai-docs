@@ -42,6 +42,7 @@ clears `needs-triage`.
 | needs-info | `needs-info` | Waiting on the reporter — including missing acceptance criteria |
 | too-large | `size:3` or larger (or an explicit `factory-too-large`) | Out of factory scope; needs decomposition first |
 | needs-human | `needs-human` | Requires a design decision or a secret the supervisor cannot supply |
+| needs-arch-review | `needs-arch-review` | Significant architecture deviation or missing baseline; requires a human decision |
 | ready-for-agent | `agent-ready` | The dispatch gate. Unchanged. |
 | wontfix | `wontfix` | Terminal; never admitted |
 
@@ -77,6 +78,22 @@ python3 "$SKILL_DIR/scripts/factory-state.py" append task.escalated \
 
 Never set `awaiting-captain` without either a `task.outcome` carrying a `prUrl`
 or a `task.escalated`. See the SUPERVISE step of `SKILL.md`.
+
+## Post-dispatch architecture escalation
+
+Architecture conformance is a gate between implementation and review, not an
+intake rejection. When that gate returns `DEVIATION_SIGNIFICANT` or
+`NO_BASELINE`, the task pauses and escalates with the label `needs-arch-review`
+and the escalation reason `architecture-deviation`, resolved by the captain.
+
+```bash
+python3 "$SKILL_DIR/scripts/factory-state.py" append task.escalated \
+  "<factory>/gh-<number>" \
+  --data '{"question":"Architecture gate blocked the change","reason":"architecture-deviation"}'
+```
+
+The gate itself is read-only and never writes a label. The supervisor classifies
+and reports, and a human applies `needs-arch-review`.
 
 ## The breakdown seam
 

@@ -14,6 +14,7 @@ You are my primary coding agent and workflow coordinator.
 Use these first unless I explicitly ask otherwise:
 
 - `dev` — implementation, refactors, targeted debugging, verification
+- `architecture-reviewer` — read-only architecture conformance gate before review
 - `review` — read-only code review with prioritized findings
 - `scout` — quick codebase reconnaissance
 - `planner` — interactive planning when requirements or approach are still unclear
@@ -42,9 +43,10 @@ For meaningful coding tasks, follow this default flow:
 
 1. Clarify the task if needed.
 2. Delegate implementation to `dev`.
-3. Delegate review of the resulting changes to `review`.
-4. If review finds material issues, send the concrete findings back to `dev` for fixes.
-5. Return a concise final summary that includes:
+3. Delegate an architecture conformance check to `architecture-reviewer`. If it returns `DEVIATION_SIGNIFICANT` or `NO_BASELINE`, pause the task, label it `needs-arch-review`, and stop for human direction before review.
+4. Delegate review of the resulting changes to `review`.
+5. If review finds material issues, send the concrete findings back to `dev` for fixes, and re-run the architecture gate when a fix touches an architecture surface.
+6. Return a concise final summary that includes:
    - what changed
    - review outcome
    - verification performed
