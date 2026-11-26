@@ -72,12 +72,15 @@ The root agent coordinates the workflow and preserves the user's scope. Use the 
 
 ### BB Child-Thread Requirement
 
-Every scout, developer, reviewer, and publisher must run as a BB child thread so the workflow is visible as a collapsible tree in the BB sidebar. Create each role with `bb thread spawn`; do not use a provider's internal subagent, delegation, team, or collaboration mechanism for these workflow roles.
+Every scout, developer, reviewer, and publisher must run as a BB child thread so the workflow is visible as a collapsible tree in the BB sidebar. Create each role once per task; do not use a provider's internal subagent, delegation, team, or collaboration mechanism for these workflow roles.
+
+Reuse an existing role thread before spawning a new one. A role that is needed again for the same task must continue its existing child thread, not create a duplicate. Use a stable, task-specific title (`<Role>: <task key>`, where the task key is the issue number or a fixed task slug) so an existing child can be matched reliably.
 
 For each child:
 
 1. Run `bb status --json` and resolve the current parent thread ID, project ID, and assigned worktree path.
-2. Spawn the role with an explicit project, the invocation worktree as its environment, parent linkage, and visible sidebar status:
+2. Look for an existing child of this parent that already serves this role and task: run `bb thread list --parent-thread "<parent-thread-id>" --json` and match on the `<Role>: <task key>` title. If one exists and is idle, send the work to it with `bb thread tell <child-thread-id> "<prompt>" --mode auto` and skip the spawn. Spawn only when no matching child exists.
+3. Spawn the role with an explicit project, the invocation worktree as its environment, parent linkage, and visible sidebar status:
 
    ```bash
    bb thread spawn \
@@ -85,15 +88,15 @@ For each child:
      --environment "<absolute-worktree-path>" \
      --parent-self \
      --visibility visible \
-     --title "<Role>: <short task name>" \
+     --title "<Role>: <task key>" \
      --prompt "<role instructions and expected result>" \
      --json
    ```
 
-3. Capture the returned thread ID. Verify with `bb thread show <child-thread-id> --json` that `parentThreadId` equals the current `BB_THREAD_ID`, visibility is `visible`, and the environment points at the invocation worktree.
-4. Wait with `bb thread wait <child-thread-id>`, then read `bb thread output <child-thread-id>`. Inspect `bb thread log <child-thread-id>` when the final output is incomplete or the child failed.
-5. Continue an existing role with `bb thread tell <child-thread-id> "<follow-up>"`, followed by another wait and output read. Reuse the same developer or reviewer child during feedback loops instead of creating an unlinked provider-internal agent.
-6. Keep child threads visible and linked after completion. Do not hide, archive, or delete them as part of this workflow.
+4. Capture the returned thread ID. Verify with `bb thread show <child-thread-id> --json` that `parentThreadId` equals the current `BB_THREAD_ID`, visibility is `visible`, and the environment points at the invocation worktree.
+5. Wait with `bb thread wait <child-thread-id>`, then read `bb thread output <child-thread-id>`. Inspect `bb thread log <child-thread-id>` when the final output is incomplete or the child failed.
+6. Continue an existing role with `bb thread tell <child-thread-id> "<follow-up>"`, followed by another wait and output read. Reuse the same developer or reviewer child during feedback loops and repeated role invocations instead of creating an unlinked provider-internal agent.
+7. Keep child threads visible and linked after completion. Do not hide, archive, or delete them as part of this workflow.
 
 If `bb` is unavailable, `BB_THREAD_ID` is missing, or BB cannot create and verify the child thread, stop before substituting another delegation mechanism. Report the exact failure and ask the user whether to proceed without sidebar-visible subagents.
 
@@ -167,7 +170,7 @@ Do not commit, push, or open the pull request before the reviewer has returned `
 - Follow repository-specific control documents and instructions throughout the workflow.
 - Preserve unrelated changes and existing authorization boundaries.
 - Use BB child-thread IDs as the durable identity for every workflow role and report those IDs in status updates.
-- Prefer reusing the developer and reviewer agents across feedback cycles so they retain context.
+- Reuse an existing role thread before spawning a new one: a role needed again for the same task continues its existing child thread, matched by the stable `<Role>: <task key>` title. This preserves context and keeps the child-thread tree flat.
 - Treat frontend as conditional guidance within `dev` and `review`, never as separate agent identities.
 - Keep the invocation worktree after publishing so an open pull request can be amended safely. Remove it only when the user explicitly requests cleanup and it is clean.
 - Keep human-facing and inter-agent messages concise and legible.
